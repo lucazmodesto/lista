@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agenda DevOps Pro</title>
+    
+    <!-- Tailwind CSS & DaisyUI -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.2/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- FullCalendar JS -->
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/index.global.min.js'></script>
+    
+    <!-- iMask JS for input masking -->
+    <script src="https://unpkg.com/imask"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@0.395.0/dist/umd/lucide.min.js"></script>
+    
+    <!-- SortableJS for Drag and Drop -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+          }
+        }
+      }
+    </script>
+    <style>
+        :root {
+            --fc-border-color: #4a5568;
+            --fc-event-text-color: #ffffff;
+        }
+        html, body {
+            background-color: #1f2937; /* bg-gray-800 */
+        }
+        .fc .fc-toolbar.fc-header-toolbar {
+            margin-bottom: 1.5em;
+            color: #d1d5db;
+            flex-flow: wrap;
+        }
+        .fc .fc-toolbar-title {
+            font-size: 1.25rem;
+        }
+        .fc .fc-button-primary {
+            background-color: #3b82f6;
+            border-color: #3b82f6;
+            transition: background-color 0.3s;
+        }
+        .fc .fc-button-primary:hover {
+            background-color: #2563eb;
+        }
+        .fc .fc-daygrid-day.fc-day-today {
+            background-color: rgba(59, 130, 246, 0.15);
+        }
+        .loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.7); display: flex;
+            justify-content: center; align-items: center; z-index: 9999;
+        }
+        .collapse-content { padding-bottom: 1rem !important; }
+        .task-completed { text-decoration: line-through; opacity: 0.6; }
+        
+        /* Estilos do Calendário Inteligente */
+        .fc-daygrid-day-frame {
+            position: relative;
+            min-height: 80px;
+        }
+        .fc-daygrid-event {
+            display: none; /* Esconde eventos por padrão */
+        }
+        .day-icon-tray {
+            position: absolute;
+            bottom: 4px;
+            right: 4px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 4px;
+        }
+        .task-item {
+            cursor: grab;
+        }
+        .task-item:active {
+            cursor: grabbing;
+        }
+    </style>
+</head>
+<body class="bg-gray-800 text-base-content font-sans">
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <span class="loading loading-spinner loading-lg text-primary"></span>
+    </div>
+
+    <div class="container mx-auto p-4 md:p-8">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-2xl md:text-3xl font-bold">Painel DevOps</h1>
+            <button class="btn btn-primary btn-circle" onclick="new_request_modal.showModal()">
+                <i data-lucide="plus" class="w-6 h-6"></i>
+            </button>
+        </div>
+
+        <!-- ======================== PAINEL DO DEVOPS ======================== -->
+        <div id="dashboardView">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Coluna do Calendário -->
+                <div class="lg:col-span-2 card bg-base-100 shadow-xl border border-gray-700">
+                    <div class="card-body">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="card-title text-xl">Agenda e Tarefas</h2>
+                            <button class="btn btn-primary btn-sm" onclick="platform_modal.showModal()">
+                                <i data-lucide="settings-2" class="w-4 h-4"></i>
+                                Plataformas
+                            </button>
+                        </div>
+                        <div id='calendar'></div>
+                    </div>
+                </div>
+
+                <!-- Coluna da Direita com as Listas -->
+                <div class="lg:col-span-1 card bg-base-100 shadow-xl border border-gray-700">
+                    <div class="card-body">
+                        <div class="flex justify-center items-center mb-4 p-2 bg-base-200 rounded-lg">
+                            <span class="label-text">Fila de Trabalho</span> 
+                            <input type="checkbox" id="view-toggle" class="toggle toggle-primary mx-4"/>
+                            <span class="label-text">Tarefas</span>
+                        </div>
+                        
+                        <!-- Container Fila de Trabalho -->
+                        <div id="requests-view">
+                            <div class="flex justify-between items-center mb-4">
+                                 <h2 class="card-title text-xl">Fila de Trabalho</h2>
+                                 <label class="cursor-pointer label gap-2">
+                                    <span class="label-text text-xs">Ocultar concluídas</span> 
+                                    <input type="checkbox" id="hide-completed-toggle" class="toggle toggle-primary toggle-sm"/>
+                                </label>
+                            </div>
+                            <div id="requests-list" class="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                                <!-- Solicitações serão inseridas aqui -->
+                            </div>
+                        </div>
+
+                        <!-- Container Tarefas Pendentes -->
+                        <div id="tasks-view" class="hidden">
+                             <h2 class="card-title text-xl mb-4">Tarefas Pendentes</h2>
+                            <div id="pending-tasks-list" class="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                                <!-- Tarefas pendentes serão inseridas aqui -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================== MODAIS ======================== -->
+    <dialog id="new_request_modal" class="modal">
+        <div class="modal-box w-11/12 max-w-3xl border border-gray-700">
+            <form method="dialog">
+                <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+            </form>
+            <h2 class="text-2xl font-bold mb-6 text-center">Formulário de Nova Solicitação</h2>
+            <form id="new-request-form" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">Nome do Solicitante</span></label>
+                        <input type="text" id="requesterName" placeholder="Seu nome completo" class="input input-bordered w-full" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">Telefone (WhatsApp)</span></label>
+                        <input type="tel" id="requesterPhone" placeholder="(99) 99999-9999" class="input input-bordered w-full" required>
+                    </div>
+                </div>
+                 <div class="form-control">
+                    <label class="label"><span class="label-text">Plataforma de Desenvolvimento</span></label>
+                    <select id="platform" class="select select-bordered w-full" required>
+                        <option disabled selected value="">Selecione a plataforma</option>
+                    </select>
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Nome da Tela ou Título da Demanda</span></label>
+                    <input type="text" id="screenName" placeholder="Ex: Tela de Login, Relatório de Vendas" class="input input-bordered w-full" required>
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Detalhes da Solicitação</span></label>
+                    <textarea id="requestDetails" class="textarea textarea-bordered h-24" placeholder="Descreva em detalhes o que você precisa que seja feito." required></textarea>
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Data Necessária</span></label>
+                    <input type="date" id="requiredDate" class="input input-bordered w-full" required>
+                </div>
+            </form>
+            <div class="modal-action mt-6">
+                <form method="dialog">
+                    <button class="btn btn-ghost">Cancelar</button>
+                </form>
+                <button type="submit" form="new-request-form" class="btn btn-primary">Enviar Solicitação</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="platform_modal" class="modal">
+        <div class="modal-box border border-gray-600">
+            <h3 class="font-bold text-lg">Gerenciar Plataformas</h3>
+            <form id="new-platform-form" class="mt-4 flex gap-2">
+                <input type="text" id="newPlatformName" placeholder="Nome da nova plataforma" class="input input-bordered w-full" required>
+                <button type="submit" class="btn btn-primary">Adicionar</button>
+            </form>
+            <div class="divider">Plataformas Existentes</div>
+            <div id="platforms-list" class="space-y-2 max-h-60 overflow-y-auto"></div>
+            <div class="modal-action"> <form method="dialog"><button class="btn">Fechar</button></form> </div>
+        </div>
+    </dialog>
+    
+    <dialog id="event_modal" class="modal">
+        <div class="modal-box border border-gray-600">
+            <h3 id="event-modal-title" class="font-bold text-lg">Nova Tarefa</h3>
+            <form id="event-form" class="mt-4 space-y-4">
+                 <input type="hidden" id="eventId">
+                 <div class="form-control">
+                    <label class="label"><span class="label-text">Título da Tarefa</span></label>
+                    <input type="text" id="eventTitle" placeholder="Ex: Reunião de Alinhamento" class="input input-bordered w-full" required>
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Vincular à Solicitação (Opcional)</span></label>
+                    <select id="link-request-select" class="select select-bordered w-full">
+                        <option value="">Nenhuma</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                     <div class="form-control">
+                        <label class="label"><span class="label-text">Data de Início</span></label>
+                        <input type="date" id="eventStartDate" class="input input-bordered w-full" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">Horário (opcional)</span></label>
+                        <input type="time" id="eventTime" class="input input-bordered w-full" disabled>
+                    </div>
+                </div>
+                <div class="flex justify-between">
+                    <div class="form-control">
+                         <label class="cursor-pointer label">
+                            <span class="label-text">Dia inteiro</span> 
+                            <input type="checkbox" id="eventAllDay" checked="checked" class="checkbox checkbox-primary ml-2" />
+                        </label>
+                    </div>
+                     <div class="form-control">
+                         <label class="cursor-pointer label">
+                            <span class="label-text">Concluída</span> 
+                            <input type="checkbox" id="eventCompleted" class="checkbox checkbox-secondary ml-2" />
+                        </label>
+                    </div>
+                </div>
+            </form>
+            <div class="modal-action justify-between">
+                <button id="delete-event-btn" class="btn btn-error" onclick="deleteCustomEvent()">Excluir</button>
+                <div>
+                    <button class="btn btn-ghost" onclick="event_modal.close()">Cancelar</button>
+                    <button class="btn btn-primary" onclick="saveCustomEvent()">Salvar</button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="day_details_modal" class="modal">
+        <div class="modal-box border border-gray-600">
+            <h3 id="day-details-title" class="font-bold text-lg mb-4">Atividades do Dia</h3>
+            <div id="day-details-list" class="space-y-2 max-h-60 overflow-y-auto">
+                <!-- Lista de eventos do dia será inserida aqui -->
+            </div>
+            <div class="modal-action">
+                <button class="btn btn-primary btn-outline" id="day-details-add-task">+ Adicionar Tarefa</button>
+                <form method="dialog"><button class="btn">Fechar</button></form>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="accept_request_modal" class="modal">
+        <div class="modal-box border border-gray-600">
+            <h3 class="font-bold text-lg">Aceitar Solicitação</h3>
+            <form id="accept-request-form" class="mt-4 space-y-4">
+                <input type="hidden" id="acceptRequestId">
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Confirmar Data de Entrega</span></label>
+                    <input type="date" id="acceptDeliveryDate" class="input input-bordered w-full" required>
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Cor de Identificação</span></label>
+                    <input type="color" id="acceptRequestColor" class="input input-bordered w-full h-12 p-1" value="#3b82f6">
+                </div>
+            </form>
+            <div class="modal-action">
+                <button class="btn btn-ghost" onclick="accept_request_modal.close()">Cancelar</button>
+                <button class="btn btn-primary" onclick="confirmAcceptance()">Confirmar Aceite</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="toast_modal" class="modal modal-bottom sm:modal-middle">
+      <div class="modal-box border border-gray-600">
+        <h3 id="toast_title" class="font-bold text-lg"></h3>
+        <p id="toast_message" class="py-4"></p>
+        <div class="modal-action"> <form method="dialog"><button class="btn">Fechar</button></form> </div>
+      </div>
+    </dialog>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, collection, onSnapshot, addDoc, deleteDoc, updateDoc, query, orderBy, where, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBUw5BnFR40m_AP-Qdn8UevZGkvVS32gNM",
+            authDomain: "lead-49f3e.firebaseapp.com",
+            projectId: "lead-49f3e",
+            storageBucket: "lead-49f3e.appspot.com",
+            messagingSenderId: "915093253027",
+            appId: "1:915093253027:web:65a18f4c31e68733418816",
+            measurementId: "G-MNLWB9KRFE"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let calendar;
+        let currentUserId = null;
+        let hideCompleted = false;
+        const statusOptions = ['Pendente', 'Em Análise', 'Em Desenvolvimento', 'Aguardando Validação', 'Concluído', 'Cancelado'];
+
+        // ======================== LÓGICA PRINCIPAL ========================
+        function showToast(title, message, type = 'success') {
+            const toastTitle = document.getElementById('toast_title');
+            toastTitle.innerText = title;
+            toastTitle.className = `font-bold text-lg ${type === 'error' ? 'text-error' : 'text-success'}`;
+            document.getElementById('toast_message').innerText = message;
+            toast_modal.showModal();
+        }
+        
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUserId = user.uid;
+                initializeAppLogics();
+            } else {
+                signInAnonymously(auth).catch((error) => console.error("Erro no login anônimo:", error));
+            }
+        });
+
+        function initializeAppLogics() {
+            lucide.createIcons();
+            initializeCalendar();
+            loadPlatforms();
+            loadRequests();
+            loadCustomEvents();
+            setupForms();
+            IMask(document.getElementById('requesterPhone'), { mask: '(00) 00000-0000' });
+            loadRequesterInfo();
+            document.getElementById('loading-overlay').style.display = 'none';
+        }
+
+        // ======================== LÓGICA DO CALENDÁRIO E TAREFAS ========================
+        function initializeCalendar() {
+            const calendarEl = document.getElementById('calendar');
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                locale: 'pt-br',
+                initialView: 'dayGridMonth',
+                headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listWeek' },
+                buttonText: { today: 'Hoje', month: 'Mês', week: 'Semana', list: 'Lista' },
+                editable: true,
+                selectable: true,
+                dateClick: (info) => openDayDetailsModal(info.date),
+                eventClick: (info) => {
+                    if (info.event.extendedProps.type === 'custom') {
+                        openEventModal(info.event);
+                    }
+                },
+                dayCellDidMount: (arg) => {
+                    if (arg.view.type !== 'dayGridMonth') return;
+
+                    const allEvents = calendar.getEvents();
+                    const dayEvents = allEvents.filter(ev => ev.start && ev.start.toISOString().split('T')[0] === arg.date.toISOString().split('T')[0]);
+                    
+                    if (dayEvents.length === 0) return;
+
+                    const iconTray = document.createElement('div');
+                    iconTray.className = 'day-icon-tray';
+                    
+                    const requestEvents = dayEvents.filter(ev => ev.extendedProps.type === 'request');
+                    const taskEvents = dayEvents.filter(ev => ev.extendedProps.type === 'custom');
+
+                    requestEvents.forEach(ev => {
+                        iconTray.innerHTML += `<i data-lucide="package" class="w-4 h-4" style="color: ${ev.backgroundColor};"></i>`;
+                    });
+
+                    const taskIconTypes = new Set();
+                    taskEvents.forEach(ev => {
+                        taskIconTypes.add(ev.extendedProps.completed ? 'task-completed' : 'task-pending');
+                    });
+
+                    taskIconTypes.forEach(type => {
+                        let iconName = 'circle';
+                        let color = '#f97316';
+                        if (type === 'task-completed') {
+                            iconName = 'check-circle';
+                            color = '#22c55e';
+                        }
+                        iconTray.innerHTML += `<i data-lucide="${iconName}" class="w-4 h-4" style="color: ${color};"></i>`;
+                    });
+
+                    arg.el.querySelector('.fc-daygrid-day-frame').appendChild(iconTray);
+                    lucide.createIcons({ nodes: [iconTray] });
+                }
+            });
+            calendar.render();
+        }
+        
+        window.openDayDetailsModal = (date) => {
+            const dateStr = date.toISOString().split('T')[0];
+            const allEvents = calendar.getEvents();
+            const dayEvents = allEvents.filter(ev => ev.start && ev.start.toISOString().split('T')[0] === dateStr);
+
+            const titleEl = document.getElementById('day-details-title');
+            const listEl = document.getElementById('day-details-list');
+            const addTaskBtn = document.getElementById('day-details-add-task');
+
+            titleEl.textContent = `Atividades de ${new Date(dateStr).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}`;
+            listEl.innerHTML = '';
+
+            if(dayEvents.length === 0) {
+                listEl.innerHTML = '<p class="text-gray-400">Nenhuma atividade para este dia.</p>';
+            } else {
+                dayEvents.forEach(event => {
+                    const props = event.extendedProps;
+                    const item = document.createElement('div');
+                    item.className = `p-2 rounded-md flex items-center gap-3 ${props.type === 'custom' ? 'cursor-pointer hover:bg-base-200' : ''}`;
+                    if (props.completed) item.classList.add('task-completed');
+                    
+                    let iconName = props.type === 'request' ? 'package' : (props.completed ? 'check-circle' : 'circle');
+
+                    item.innerHTML = `
+                        <i data-lucide="${iconName}" class="w-5 h-5 flex-shrink-0" style="color: ${event.backgroundColor}"></i>
+                        <span class="flex-grow">${event.title}</span>
+                        ${props.type === 'custom' ? `<input type="checkbox" class="checkbox checkbox-xs checkbox-primary" onchange="toggleTaskCompletion('${event.id}', ${props.completed})" ${props.completed ? 'checked' : ''}>` : ''}
+                    `;
+
+                    if(props.type === 'custom') {
+                        item.addEventListener('click', (e) => {
+                            if (e.target.type === 'checkbox') return;
+                            day_details_modal.close();
+                            openEventModal(event);
+                        });
+                    }
+                    listEl.appendChild(item);
+                });
+            }
+            lucide.createIcons({ nodes: [listEl] });
+            
+            addTaskBtn.onclick = () => {
+                day_details_modal.close();
+                openEventModal({ dateStr });
+            };
+
+            day_details_modal.showModal();
+        };
+
+        window.openEventModal = (eventData) => {
+            const form = document.getElementById('event-form');
+            form.reset();
+            const modalTitle = document.getElementById('event-modal-title');
+            const deleteBtn = document.getElementById('delete-event-btn');
+            const eventIdInput = document.getElementById('eventId');
+            const eventTimeInput = document.getElementById('eventTime');
+            const allDayCheckbox = document.getElementById('eventAllDay');
+            const completedCheckbox = document.getElementById('eventCompleted');
+
+            if (eventData.id) { // Editando
+                modalTitle.textContent = "Editar Tarefa";
+                deleteBtn.style.display = 'block';
+                eventIdInput.value = eventData.id;
+                document.getElementById('eventTitle').value = eventData.title;
+                document.getElementById('link-request-select').value = eventData.extendedProps.linkedRequestId || "";
+                completedCheckbox.checked = eventData.extendedProps.completed || false;
+                
+                const startDate = new Date(eventData.start);
+                document.getElementById('eventStartDate').value = startDate.toISOString().split('T')[0];
+                allDayCheckbox.checked = eventData.allDay;
+
+                if (!eventData.allDay) {
+                    eventTimeInput.disabled = false;
+                    eventTimeInput.value = startDate.toTimeString().substring(0, 5);
+                } else {
+                    eventTimeInput.disabled = true;
+                }
+            } else { // Criando
+                modalTitle.textContent = "Nova Tarefa";
+                deleteBtn.style.display = 'none';
+                eventIdInput.value = '';
+                document.getElementById('eventStartDate').value = eventData.dateStr;
+                allDayCheckbox.checked = true;
+                completedCheckbox.checked = false;
+                eventTimeInput.disabled = true;
+            }
+            event_modal.showModal();
+        };
+
+        window.saveCustomEvent = async () => {
+            const eventId = document.getElementById('eventId').value;
+            const title = document.getElementById('eventTitle').value.trim();
+            const date = document.getElementById('eventStartDate').value;
+            const time = document.getElementById('eventTime').value;
+            const allDay = document.getElementById('eventAllDay').checked;
+            const completed = document.getElementById('eventCompleted').checked;
+            const linkedRequestSelect = document.getElementById('link-request-select');
+            const linkedRequestId = linkedRequestSelect.value;
+            
+            if (!title || !date) return alert("Título e data de início são obrigatórios.");
+
+            const startDateTime = allDay ? date : `${date}T${time || '00:00:00'}`;
+            const selectedOption = linkedRequestSelect.options[linkedRequestSelect.selectedIndex];
+            const color = selectedOption.dataset.color || '#f97316';
+
+            const eventData = { title, start: startDateTime, allDay, color, completed, linkedRequestId: linkedRequestId || null };
+
+            try {
+                if (eventId) {
+                    await updateDoc(doc(db, "events", eventId), eventData);
+                    showToast("Sucesso!", "Tarefa atualizada.");
+                } else {
+                    const q = query(collection(db, "events"));
+                    const querySnapshot = await getDocs(q);
+                    eventData.order = querySnapshot.size;
+                    await addDoc(collection(db, "events"), eventData);
+                    showToast("Sucesso!", "Nova tarefa salva.");
+                }
+                event_modal.close();
+            } catch (error) { console.error("Erro ao salvar tarefa: ", error); }
+        };
+        
+        window.deleteCustomEvent = async () => {
+            const eventId = document.getElementById('eventId').value;
+            if (!eventId) return;
+            if (confirm("Tem certeza que deseja excluir esta tarefa?")) {
+                await deleteDoc(doc(db, "events", eventId));
+                showToast("Sucesso!", "Tarefa excluída.");
+                event_modal.close();
+            }
+        };
+
+        function loadCustomEvents() {
+            const q = query(collection(db, "events"), orderBy("order"));
+            onSnapshot(q, (snapshot) => {
+                calendar.getEvents().filter(e => e.extendedProps.type === 'custom').forEach(e => e.remove());
+                const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), extendedProps: { type: 'custom', completed: doc.data().completed, linkedRequestId: doc.data().linkedRequestId } }));
+                calendar.addEventSource(events);
+                
+                displayPendingTasks(snapshot.docs.filter(doc => !doc.data().completed));
+            });
+        }
+        
+        function displayPendingTasks(tasks) {
+            const container = document.getElementById('pending-tasks-list');
+            container.innerHTML = '';
+            tasks.forEach(taskDoc => {
+                const task = taskDoc.data();
+                const item = document.createElement('div');
+                item.className = 'p-3 rounded-lg bg-base-200 flex items-center gap-3 task-item';
+                item.dataset.id = taskDoc.id;
+                
+                const startDate = new Date(task.start);
+                let formattedDateTime = startDate.toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' });
+                
+                if (!task.allDay) {
+                    const timeString = startDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    formattedDateTime += ` às ${timeString}`;
+                }
+
+                item.innerHTML = `
+                    <i data-lucide="grip-vertical" class="w-5 h-5 text-gray-500"></i>
+                    <div class="flex-grow">
+                        <p class="font-semibold">${task.title}</p>
+                        <p class="text-xs text-gray-400">${formattedDateTime}</p>
+                    </div>
+                    <input type="checkbox" class="checkbox checkbox-primary" onchange="toggleTaskCompletion('${taskDoc.id}', true)">
+                `;
+                container.appendChild(item);
+            });
+            lucide.createIcons();
+
+            new Sortable(container, {
+                animation: 150,
+                handle: '.task-item',
+                onEnd: async (evt) => {
+                    const items = Array.from(evt.target.children);
+                    const batch = writeBatch(db);
+                    items.forEach((item, index) => {
+                        const docId = item.dataset.id;
+                        if(docId) {
+                            const docRef = doc(db, "events", docId);
+                            batch.update(docRef, { order: index });
+                        }
+                    });
+                    await batch.commit();
+                }
+            });
+        }
+
+        function loadTasksForRequest(requestId, container) {
+            onSnapshot(query(collection(db, "events"), where("linkedRequestId", "==", requestId)), (snapshot) => {
+                if (snapshot.empty) {
+                    container.innerHTML = '<p class="text-xs text-gray-400">Nenhuma tarefa vinculada.</p>';
+                    return;
+                }
+                container.innerHTML = snapshot.docs.map(doc => {
+                    const task = doc.data();
+                    return `<div class="flex items-center gap-2 text-sm">
+                                <input type="checkbox" class="checkbox checkbox-xs checkbox-primary" onchange="toggleTaskCompletion('${doc.id}', ${task.completed})" ${task.completed ? 'checked' : ''}>
+                                <span class="${task.completed ? 'task-completed' : ''}">${task.title}</span>
+                            </div>`;
+                }).join('');
+            });
+        }
+
+        window.toggleTaskCompletion = async (taskId, currentStatus) => {
+            await updateDoc(doc(db, "events", taskId), { completed: !currentStatus });
+        };
+
+        // ======================== LÓGICA DE PLATAFORMAS ========================
+        function loadPlatforms() {
+            onSnapshot(query(collection(db, "platforms"), orderBy("name")), (snapshot) => {
+                const list = document.getElementById('platforms-list');
+                const select = document.getElementById('platform');
+                list.innerHTML = '';
+                select.innerHTML = '<option disabled selected value="">Selecione a plataforma</option>';
+                snapshot.forEach((doc) => {
+                    const platform = doc.data();
+                    list.innerHTML += `<div class="flex justify-between items-center bg-base-200 p-2 rounded"><span>${platform.name}</span><button class="btn btn-xs btn-error btn-ghost" onclick="deletePlatform('${doc.id}')"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`;
+                    select.innerHTML += `<option value="${doc.id}">${platform.name}</option>`;
+                });
+                lucide.createIcons();
+            });
+        }
+
+        window.deletePlatform = async (id) => {
+            if (confirm("Excluir esta plataforma?")) {
+                await deleteDoc(doc(db, "platforms", id));
+                showToast("Sucesso!", "Plataforma excluída.");
+            }
+        }
+
+        // ======================== LÓGICA DE SOLICITAÇÕES ========================
+        function loadRequests() {
+            const q = query(collection(db, "requests"), orderBy("requiredDate", "asc"));
+            onSnapshot(q, (querySnapshot) => {
+                const requestsList = document.getElementById('requests-list');
+                const linkRequestSelect = document.getElementById('link-request-select');
+                requestsList.innerHTML = '';
+                linkRequestSelect.innerHTML = '<option value="" data-color="#f97316">Nenhuma</option>';
+                
+                calendar.getEvents().filter(e => e.extendedProps.type === 'request').forEach(e => e.remove());
+                const calendarEvents = [];
+                const activeRequests = [];
+
+                querySnapshot.forEach((doc) => {
+                    const request = doc.data();
+                    const isCompleted = request.status === 'Concluído' || request.status === 'Cancelado';
+                    if (hideCompleted && isCompleted) return;
+                    
+                    requestsList.appendChild(createRequestCard(doc.id, request));
+
+                    if (!isCompleted) {
+                        activeRequests.push({ id: doc.id, name: request.screenName, color: request.color });
+                        if (request.status !== 'Pendente') {
+                             calendarEvents.push({
+                                id: doc.id,
+                                title: `Entrega: ${request.screenName}`,
+                                start: request.requiredDate,
+                                allDay: true,
+                                color: request.color || '#3b82f6',
+                                extendedProps: { type: 'request' }
+                            });
+                        }
+                    }
+                });
+                
+                calendar.addEventSource(calendarEvents);
+                activeRequests.forEach(req => { linkRequestSelect.innerHTML += `<option value="${req.id}" data-color="${req.color || '#3b82f6'}">${req.name}</option>`; });
+                lucide.createIcons();
+            });
+        }
+        
+        function createRequestCard(id, request) {
+            const card = document.createElement('div');
+            card.className = 'card bg-base-200 shadow-md collapse collapse-arrow border border-gray-700';
+            const cardColor = request.color || 'transparent';
+            const formattedDate = new Date(request.requiredDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'});
+
+            let contentHtml;
+            if (request.status === 'Pendente') {
+                contentHtml = `
+                    <div class="divider my-1">Detalhes</div>
+                    <p class="text-sm bg-base-200 p-2 rounded-md whitespace-pre-wrap">${request.details || 'Nenhum detalhe fornecido.'}</p>
+                    <div class="flex gap-2 mt-4">
+                         <button class="btn btn-sm btn-success flex-1" onclick="openAcceptModal('${id}', '${request.requiredDate}')"><i data-lucide="check"></i>Aceitar</button>
+                         <button class="btn btn-sm btn-error flex-1" onclick="rejectRequest('${id}')"><i data-lucide="x"></i>Recusar</button>
+                    </div>
+                `;
+            } else {
+                contentHtml = `
+                    <div class="divider my-1">Detalhes</div>
+                    <p class="text-sm bg-base-200 p-2 rounded-md whitespace-pre-wrap">${request.details || 'Nenhum detalhe fornecido.'}</p>
+                    <div class="divider my-1">Tarefas Vinculadas</div>
+                    <div id="tasks-for-${id}" class="space-y-1"></div>
+                    <div class="divider my-1">Ações</div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="label py-0"><span class="label-text">Novo Status</span></label>
+                            <select id="status-${id}" class="select select-bordered select-sm w-full">${statusOptions.map(s => `<option value="${s}" ${s === request.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
+                        </div>
+                        <div>
+                            <label class="label py-0"><span class="label-text">Ajustar Entrega</span></label>
+                            <input type="date" id="newDate-${id}" value="${request.requiredDate}" class="input input-bordered input-sm w-full" />
+                        </div>
+                    </div>
+                    <div class="flex gap-2 mt-4">
+                         <button class="btn btn-sm btn-primary flex-1" onclick="saveRequestChanges('${id}')"><i data-lucide="save"></i>Salvar</button>
+                         <button class="btn btn-sm btn-success flex-1" onclick="notifyByWhatsApp('${id}', '${request.requesterName}', '${request.requesterPhone}', '${request.screenName}')"><i data-lucide="send"></i>Notificar</button>
+                         <button class="btn btn-sm btn-error btn-outline" onclick="deleteRequest('${id}')"><i data-lucide="trash-2"></i></button>
+                    </div>
+                `;
+            }
+
+            card.innerHTML = `
+                <input type="checkbox" class="peer" /> 
+                <div class="collapse-title text-md font-medium peer-checked:bg-primary/20" style="border-left: 4px solid ${cardColor};">
+                    <div class="flex justify-between items-center">
+                        <span class="truncate">${request.screenName || 'Solicitação Geral'}</span>
+                        <span class="badge ${getStatusColor(request.status)}">${request.status}</span>
+                    </div>
+                    <div class="text-xs text-gray-400 flex justify-between mt-1">
+                        <span class="truncate">${request.requesterName} em ${request.platformName || 'N/A'}</span>
+                        <span class="font-semibold whitespace-nowrap">Entrega: ${formattedDate}</span>
+                    </div>
+                </div>
+                <div class="collapse-content bg-base-100 p-4">${contentHtml}</div>
+            `;
+            if (request.status !== 'Pendente') {
+                loadTasksForRequest(id, card.querySelector(`#tasks-for-${id}`));
+            }
+            return card;
+        }
+        
+        window.openAcceptModal = (id, date) => {
+            document.getElementById('acceptRequestId').value = id;
+            document.getElementById('acceptDeliveryDate').value = date;
+            accept_request_modal.showModal();
+        };
+
+        window.rejectRequest = async (id) => {
+            if (!confirm("Tem certeza que deseja recusar esta solicitação?")) return;
+            await updateDoc(doc(db, "requests", id), { status: 'Cancelado' });
+            showToast("Recusado", "A solicitação foi marcada como cancelada.");
+        };
+
+        window.confirmAcceptance = async () => {
+            const id = document.getElementById('acceptRequestId').value;
+            const newDate = document.getElementById('acceptDeliveryDate').value;
+            const color = document.getElementById('acceptRequestColor').value;
+            await updateDoc(doc(db, "requests", id), {
+                status: 'Em Análise',
+                requiredDate: newDate,
+                color: color
+            });
+            showToast("Aceito!", "A solicitação foi aceita e adicionada à fila de trabalho.");
+            accept_request_modal.close();
+        };
+
+        window.saveRequestChanges = async (id) => {
+            const newStatus = document.getElementById(`status-${id}`).value;
+            const newDate = document.getElementById(`newDate-${id}`).value;
+            try {
+                await updateDoc(doc(db, "requests", id), { status: newStatus, requiredDate: newDate });
+                showToast('Sucesso', 'Alterações salvas no sistema.');
+            } catch (error) { showToast('Erro', 'Não foi possível salvar as alterações.', 'error'); }
+        };
+
+        window.notifyByWhatsApp = (id, name, phone, screen) => {
+            const status = document.getElementById(`status-${id}`).value;
+            const date = document.getElementById(`newDate-${id}`).value;
+            const formattedDate = new Date(date).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+            let message = `Olá ${name}, sua solicitação para "${screen}" foi atualizada:\n\n*Status:* ${status}\n*Prazo de Entrega:* ${formattedDate}`;
+            const url = `https://wa.me/55${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
+            window.open(url, '_blank');
+        };
+
+        window.deleteRequest = async (id) => {
+            if (!confirm("Tem certeza que deseja excluir esta solicitação? Esta ação não pode ser desfeita.")) return;
+            try {
+                const tasksQuery = query(collection(db, "events"), where("linkedRequestId", "==", id));
+                const tasksSnapshot = await getDocs(tasksQuery);
+                tasksSnapshot.forEach(taskDoc => deleteDoc(doc(db, "events", taskDoc.id)));
+                await deleteDoc(doc(db, "requests", id));
+                showToast('Sucesso', 'Solicitação e tarefas vinculadas foram excluídas.');
+            } catch (error) { showToast('Erro', 'Não foi possível excluir a solicitação.', 'error'); }
+        };
+
+        function getStatusColor(status) {
+            const colors = { 'Pendente': 'badge-warning', 'Em Análise': 'badge-info', 'Em Desenvolvimento': 'badge-primary', 'Aguardando Validação': 'badge-secondary', 'Concluído': 'badge-success', 'Cancelado': 'badge-error' };
+            return colors[status] || 'badge-ghost';
+        }
+
+        // ======================== LÓGICA DOS FORMULÁRIOS ========================
+        function setupForms() {
+            document.getElementById('new-platform-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const nameInput = document.getElementById('newPlatformName');
+                if (nameInput.value.trim()) {
+                    await addDoc(collection(db, "platforms"), { name: nameInput.value.trim() });
+                    nameInput.value = '';
+                }
+            });
+
+            document.getElementById('new-request-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const platformSelect = document.getElementById('platform');
+                const formData = {
+                    requesterName: document.getElementById('requesterName').value,
+                    requesterPhone: document.getElementById('requesterPhone').value,
+                    platformId: platformSelect.value,
+                    platformName: platformSelect.options[platformSelect.selectedIndex].text,
+                    screenName: document.getElementById('screenName').value,
+                    details: document.getElementById('requestDetails').value,
+                    requiredDate: document.getElementById('requiredDate').value,
+                    status: 'Pendente', createdAt: new Date().toISOString(),
+                    color: null
+                };
+                if (!formData.requesterName || !formData.requesterPhone || !formData.platformId || !formData.requiredDate || !formData.screenName || !formData.details) {
+                    return alert("Por favor, preencha todos os campos.");
+                }
+                try {
+                    await addDoc(collection(db, "requests"), formData);
+                    saveRequesterInfo(formData.requesterName, formData.requesterPhone);
+                    showToast("Sucesso!", "Sua solicitação foi enviada.");
+                    new_request_modal.close(); // Fecha o modal após o envio
+                    e.target.reset();
+                    loadRequesterInfo();
+                } catch (error) { console.error("Erro ao adicionar solicitação: ", error); }
+            });
+
+            document.getElementById('hide-completed-toggle').addEventListener('change', (e) => {
+                hideCompleted = e.target.checked;
+                loadRequests();
+            });
+            
+            document.getElementById('eventAllDay').addEventListener('change', (e) => {
+                document.getElementById('eventTime').disabled = e.target.checked;
+            });
+            
+            document.getElementById('view-toggle').addEventListener('change', (e) => {
+                const showTasks = e.target.checked;
+                document.getElementById('requests-view').classList.toggle('hidden', showTasks);
+                document.getElementById('tasks-view').classList.toggle('hidden', !showTasks);
+            });
+        }
+        
+        // ======================== HELPERS / LOCALSTORAGE ========================
+        function saveRequesterInfo(name, phone) {
+            localStorage.setItem('requesterName', name);
+            localStorage.setItem('requesterPhone', phone);
+        }
+
+        function loadRequesterInfo() {
+            document.getElementById('requesterName').value = localStorage.getItem('requesterName') || '';
+            document.getElementById('requesterPhone').value = localStorage.getItem('requesterPhone') || '';
+        }
+    </script>
+</body>
+</html>
